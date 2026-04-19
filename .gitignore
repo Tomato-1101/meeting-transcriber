@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Legacy scaffold (unused empty Vite template; real frontend is /frontend)
+backend/frontend/
+
+# Data
+backend/data/uploads/
+backend/data/chunks/
+backend/data/*.sqlite3
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
