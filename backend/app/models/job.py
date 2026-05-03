@@ -21,6 +21,8 @@ class Job(Base):
     num_chunks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preprocess_profile: Mapped[str] = mapped_column(String(20), default="standard")
+    preprocess_stats: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)

@@ -1,15 +1,43 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.transcription import Transcription
 from app.models.ai_result import AIResult
-from app.schemas.ai_result import AIProcessRequest, AIResultResponse
-from app.services.ai_service import run_ai_processing, PROMPTS
+from app.schemas.ai_result import (
+    AIProcessRequest,
+    AIResultResponse,
+    AIPromptInfo,
+)
+from app.services.ai_service import run_ai_processing, PROMPTS, PROMPT_META
 
 router = APIRouter(tags=["ai_processing"])
+
+ALLOWED_MODELS = {
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+}
+
+
+@router.get("/ai-prompts", response_model=list[AIPromptInfo])
+async def list_ai_prompts():
+    """全プロンプトテンプレートのメタ情報と本文を返す。フロント側でプレビュー表示に使用。"""
+    items: list[AIPromptInfo] = []
+    for key, prompt in PROMPTS.items():
+        meta = PROMPT_META.get(key, {})
+        items.append(
+            AIPromptInfo(
+                type=key,
+                label=meta.get("label", key),
+                description=meta.get("description", ""),
+                category=meta.get("category", "general"),
+                prompt=prompt,
+            )
+        )
+    return items
 
 
 @router.post("/transcriptions/{transcription_id}/ai", response_model=AIResultResponse)
@@ -25,8 +53,7 @@ async def trigger_ai_processing(
     if not transcription:
         raise HTTPException(404, "Transcription not found")
 
-    allowed_models = {"gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4.1-mini", "gpt-4.1-nano"}
-    if request.model not in allowed_models:
+    if request.model not in ALLOWED_MODELS:
         raise HTTPException(400, f"Unsupported model: {request.model}")
 
     allowed_types = set(PROMPTS.keys()) | {"custom"}
@@ -69,3 +96,17 @@ async def list_ai_results(
         .order_by(AIResult.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.delete("/ai-results/{ai_result_id}")
+async def delete_ai_result(
+    ai_result_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AIResult).where(AIResult.id == ai_result_id))
+    ai_result = result.scalar_one_or_none()
+    if not ai_result:
+        raise HTTPException(404, "AI result not found")
+    await db.delete(ai_result)
+    await db.commit()
+    return {"status": "deleted"}

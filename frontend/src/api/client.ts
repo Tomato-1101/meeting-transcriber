@@ -1,4 +1,4 @@
-import type { Job, Transcription, AIResult } from '../types'
+import type { Job, Transcription, AIResult, AIPromptInfo, ChatMessage } from '../types'
 
 const BASE = '/api'
 
@@ -11,11 +11,17 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
-export async function createJob(file: File, model: string, language?: string): Promise<Job> {
+export async function createJob(
+  file: File,
+  model: string,
+  language?: string,
+  preprocessProfile?: string,
+): Promise<Job> {
   const form = new FormData()
   form.append('file', file)
   form.append('model', model)
   if (language) form.append('language', language)
+  if (preprocessProfile) form.append('preprocess_profile', preprocessProfile)
   return request<Job>('/jobs', { method: 'POST', body: form })
 }
 
@@ -29,6 +35,14 @@ export async function getJob(jobId: string): Promise<Job> {
 
 export async function deleteJob(jobId: string): Promise<void> {
   await fetch(`${BASE}/jobs/${jobId}`, { method: 'DELETE' })
+}
+
+export async function renameJob(jobId: string, originalFilename: string): Promise<Job> {
+  return request(`/jobs/${jobId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ original_filename: originalFilename }),
+  })
 }
 
 export async function getTranscription(id: string): Promise<Transcription> {
@@ -60,4 +74,29 @@ export async function triggerAI(
 
 export async function listAIResults(transcriptionId: string): Promise<AIResult[]> {
   return request(`/transcriptions/${transcriptionId}/ai`)
+}
+
+export async function deleteAIResult(aiResultId: string): Promise<void> {
+  const res = await fetch(`${BASE}/ai-results/${aiResultId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
+}
+
+export async function listAIPrompts(): Promise<AIPromptInfo[]> {
+  return request('/ai-prompts')
+}
+
+export async function listChatMessages(aiResultId: string): Promise<ChatMessage[]> {
+  return request(`/ai-results/${aiResultId}/chat`)
+}
+
+export async function sendChatMessage(
+  aiResultId: string,
+  content: string,
+  model: string = 'gemini-2.5-flash',
+): Promise<{ user: ChatMessage; assistant: ChatMessage }> {
+  return request(`/ai-results/${aiResultId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, model }),
+  })
 }

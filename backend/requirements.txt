@@ -10,3 +10,10 @@ openai>=1.60.0
 google-genai>=1.0.0
 python-dotenv>=1.0.0
 httpx>=0.27.0
+# 音声前処理 (ノイズ低減 + VAD ベース無音カット)
+noisereduce>=3.0.0
+numpy>=1.26.0
+soundfile>=0.12.1
+# silero-vad は torch.hub からロードするので torch/torchaudio のみ宣言。
+# Dockerfile で CPU 専用ホイールを別途インストールしている。
+# torchaudio は silero-vad の hubconf.py が import する。

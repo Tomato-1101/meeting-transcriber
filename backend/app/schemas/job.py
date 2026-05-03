@@ -18,6 +18,8 @@ class JobResponse(BaseModel):
     num_chunks: int | None
     progress: float
     error_message: str | None
+    preprocess_profile: str = "standard"
+    preprocess_stats: str | None = None
     created_at: datetime
     updated_at: datetime
     transcription_id: str | None = None
@@ -28,3 +30,7 @@ class JobResponse(BaseModel):
 class JobListResponse(BaseModel):
     jobs: list[JobResponse]
     total: int
+
+
+class JobUpdateRequest(BaseModel):
+    original_filename: str

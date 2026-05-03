@@ -19,3 +19,8 @@ class AIResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     transcription: Mapped["Transcription"] = relationship(back_populates="ai_results")
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="ai_result",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.sequence_order",
+    )
