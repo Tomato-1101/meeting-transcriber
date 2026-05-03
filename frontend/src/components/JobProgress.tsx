@@ -2,6 +2,7 @@ import type { JobProgress as JobProgressType } from '../types'
 
 const STAGE_LABELS: Record<string, string> = {
   probing: '音声ファイルを解析中...',
+  preprocessing: 'ノイズ低減 + 無音カット中...',
   compressing: '圧縮中...',
   chunking: 'チャンク分割中...',
   transcribing: '文字起こし中...',

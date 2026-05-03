@@ -8,8 +8,9 @@ from app.database import async_session
 from app.models.job import Job
 from app.models.transcription import Transcription, Segment
 from app.services.audio_processor import (
-    probe_audio, compress_audio, should_chunk, chunk_audio, cleanup_chunks, ChunkInfo, ChunkResult,
+    probe_audio, should_chunk, chunk_audio, cleanup_chunks, ChunkInfo, ChunkResult,
 )
+from app.services.audio_preprocessor import preprocess_audio
 from app.services.openai_client import transcribe_audio
 from app.utils.job_manager import job_progress
 from app.utils.logger import logger
@@ -32,12 +33,22 @@ async def process_transcription_job(job_id: str):
             job.duration_seconds = info.duration_seconds
             await db.commit()
 
-            # Stage 2: Compress
-            job_progress.update(job_id, "compressing", 0.10)
+            # Stage 2: Preprocess (noise reduction + VAD silence trim + compress)
+            job_progress.update(job_id, "preprocessing", 0.10)
             compressed_path = UPLOADS_DIR / f"{job_id}_compressed.mp3"
-            await compress_audio(original_path, compressed_path)
+            profile = getattr(job, "preprocess_profile", "standard") or "standard"
+            preprocess_result = await preprocess_audio(
+                original_path, compressed_path, profile=profile,
+            )
+            job.preprocess_stats = preprocess_result.to_json()
+            await db.commit()
             compressed_info = await probe_audio(compressed_path)
-            logger.info(f"Compressed: {info.file_size_bytes/1024/1024:.1f}MB -> {compressed_info.file_size_bytes/1024/1024:.1f}MB")
+            logger.info(
+                f"Preprocessed: {info.file_size_bytes/1024/1024:.1f}MB -> "
+                f"{compressed_info.file_size_bytes/1024/1024:.1f}MB, "
+                f"課金分数 {info.duration_seconds/60:.1f}min -> {preprocess_result.processed_duration_s/60:.1f}min "
+                f"({preprocess_result.reduction_percent():.1f}%削減)"
+            )
 
             # Stage 3: Chunk if needed
             if should_chunk(compressed_path, compressed_info.duration_seconds):

@@ -41,10 +41,15 @@ export function HomePage() {
     }
   }, [progress, navigate, loadJobs, reset])
 
-  const handleUpload = async (file: File, model: string, language?: string) => {
+  const handleUpload = async (
+    file: File,
+    model: string,
+    language?: string,
+    preprocessProfile?: string,
+  ) => {
     setError(null)
     try {
-      const job = await createJob(file, model, language)
+      const job = await createJob(file, model, language, preprocessProfile)
       setActiveJobId(job.id)
       setActiveFilename(file.name)
       loadJobs()
@@ -56,6 +61,10 @@ export function HomePage() {
   const handleDelete = async (id: string) => {
     await deleteJob(id)
     loadJobs()
+  }
+
+  const handleRename = (id: string, newName: string) => {
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, original_filename: newName } : j)))
   }
 
   return (
@@ -74,7 +83,7 @@ export function HomePage() {
 
       <div>
         <h2 className="text-lg font-medium text-gray-800 mb-4">履歴</h2>
-        <JobList jobs={jobs} onDelete={handleDelete} />
+        <JobList jobs={jobs} onDelete={handleDelete} onRename={handleRename} />
       </div>
     </div>
   )

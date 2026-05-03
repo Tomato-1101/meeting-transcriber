@@ -1,32 +1,66 @@
-import { useState, useCallback } from 'react'
-import { Upload } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import { Upload, Sparkles, FileAudio, Volume2 } from 'lucide-react'
 
 interface Props {
-  onUpload: (file: File, model: string, language?: string) => void
+  onUpload: (file: File, model: string, language?: string, preprocessProfile?: string) => void
   disabled?: boolean
 }
 
 const MODELS = [
   {
     id: 'gpt-4o-transcribe',
-    name: 'Highest Accuracy (最高精度)',
-    desc: '$0.006/分 - 最高精度テキスト変換・タイムスタンプなし',
+    name: '最高精度',
+    desc: '$0.006/分 — 最高精度・タイムスタンプなし',
+    pricePerMin: 0.006,
   },
   {
     id: 'gpt-4o-transcribe-diarize',
-    name: 'High Quality + 話者分離',
-    desc: '$0.006/分 - 話者ラベル・タイムスタンプ付き',
+    name: '高品質 + 話者分離',
+    desc: '$0.006/分 — 話者ラベル＆タイムスタンプ',
+    pricePerMin: 0.006,
   },
   {
     id: 'gpt-4o-mini-transcribe',
-    name: 'Standard (低コスト)',
-    desc: '$0.003/分 - コスト半額・タイムスタンプなし',
+    name: '低コスト',
+    desc: '$0.003/分 — コスト半額・タイムスタンプなし',
+    pricePerMin: 0.003,
   },
 ]
+
+const PROFILES = [
+  {
+    id: 'standard',
+    name: '標準（推奨）',
+    desc: 'ノイズ低減 + 無音カット で 10-30% 短縮',
+    icon: Sparkles,
+    expectedReduction: 0.20,
+  },
+  {
+    id: 'aggressive',
+    name: '積極カット',
+    desc: '無音の余白を最小化（カットしすぎる可能性あり）',
+    icon: Volume2,
+    expectedReduction: 0.30,
+  },
+  {
+    id: 'raw',
+    name: '前処理なし',
+    desc: '元音声のまま（精度最大化、コスト削減なし）',
+    icon: FileAudio,
+    expectedReduction: 0.0,
+  },
+]
+
+function estimateAudioMinutes(file: File): number {
+  // 多くの音声形式は 1MB ≒ 1 分(64-128kbps) のオーダー。低めに見積もり。
+  const mb = file.size / 1024 / 1024
+  return mb * 1.0
+}
 
 export function UploadArea({ onUpload, disabled }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [model, setModel] = useState('')
+  const [profile, setProfile] = useState('standard')
   const [language, setLanguage] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
@@ -46,10 +80,23 @@ export function UploadArea({ onUpload, disabled }: Props) {
 
   const handleSubmit = () => {
     if (!selectedFile || !model) return
-    onUpload(selectedFile, model, language || undefined)
+    onUpload(selectedFile, model, language || undefined, profile)
     setSelectedFile(null)
     setModel('')
   }
+
+  const costEstimate = useMemo(() => {
+    if (!selectedFile || !model) return null
+    const minutes = estimateAudioMinutes(selectedFile)
+    const m = MODELS.find((mm) => mm.id === model)
+    if (!m) return null
+    const profileObj = PROFILES.find((p) => p.id === profile)
+    const reduction = profileObj?.expectedReduction || 0
+    const billedMinutes = minutes * (1 - reduction)
+    const cost = billedMinutes * m.pricePerMin
+    const original = minutes * m.pricePerMin
+    return { minutes, billedMinutes, cost, original, reduction }
+  }, [selectedFile, model, profile])
 
   return (
     <div className="space-y-4">
@@ -101,7 +148,7 @@ export function UploadArea({ onUpload, disabled }: Props) {
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              文字起こしモデルを選択
+              文字起こしモデル
             </label>
             <div className="space-y-2">
               {MODELS.map((m) => (
@@ -131,6 +178,41 @@ export function UploadArea({ onUpload, disabled }: Props) {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              前処理プロファイル
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {PROFILES.map((p) => {
+                const Icon = p.icon
+                return (
+                  <label
+                    key={p.id}
+                    className={`flex flex-col items-start gap-1 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      profile === p.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="profile"
+                      value={p.id}
+                      checked={profile === p.id}
+                      onChange={(e) => setProfile(e.target.value)}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                      <Icon size={14} />
+                      {p.name}
+                    </div>
+                    <div className="text-xs text-gray-500">{p.desc}</div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               言語 (空欄で自動検出)
             </label>
@@ -142,6 +224,27 @@ export function UploadArea({ onUpload, disabled }: Props) {
               className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
+
+          {costEstimate && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm">
+              <div className="font-medium text-gray-800 mb-1">想定コスト</div>
+              <div className="text-gray-600 text-xs leading-relaxed">
+                推定 {costEstimate.minutes.toFixed(1)} 分の音声 ・ 課金分数 約{' '}
+                {costEstimate.billedMinutes.toFixed(1)} 分 ・{' '}
+                <span className="font-medium text-blue-700">
+                  ${costEstimate.cost.toFixed(3)}
+                </span>
+                {costEstimate.reduction > 0 && (
+                  <span className="text-green-600 ml-1">
+                    （前処理なし比 -${(costEstimate.original - costEstimate.cost).toFixed(3)}）
+                  </span>
+                )}
+                <div className="text-gray-400 mt-1">
+                  ※ ファイルサイズからの概算。実際は音声ビットレート次第。
+                </div>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleSubmit}

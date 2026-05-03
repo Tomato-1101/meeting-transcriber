@@ -43,6 +43,24 @@ export interface AIResult {
   created_at: string
 }
 
+export interface AIPromptInfo {
+  type: string
+  label: string
+  description: string
+  category: 'lecture' | 'meeting' | 'general'
+  prompt: string
+}
+
+export interface ChatMessage {
+  id: string
+  ai_result_id: string
+  role: 'user' | 'assistant'
+  content: string
+  model_used: string | null
+  created_at: string
+  sequence_order: number
+}
+
 export interface JobProgress {
   stage: string
   progress: number
