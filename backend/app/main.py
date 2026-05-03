@@ -28,6 +28,10 @@ app = FastAPI(title="Meeting Transcription API", version="1.0.0", lifespan=lifes
 
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+# `*` + allow_credentials は cookie が送れない（ブラウザが弾く）+ 設定ミスを誘発するので
+# 起動時に拒否する。明示的なオリジンだけを受け付ける。
+if "*" in _cors_origins:
+    raise RuntimeError("CORS_ORIGINS=* with credentials is not allowed; set explicit origins")
 
 app.add_middleware(
     CORSMiddleware,
@@ -97,12 +101,19 @@ if _FRONTEND_DIST.is_dir():
         name="assets",
     )
 
+    _DIST_RESOLVED = _FRONTEND_DIST.resolve()
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         # /api は上のルータが捕まえているのでここには来ないが、念のためガード
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
-        candidate = _FRONTEND_DIST / full_path
+        # path traversal 防止: resolve した結果が dist 配下に収まることを必ず確認
+        candidate = (_FRONTEND_DIST / full_path).resolve()
+        try:
+            candidate.relative_to(_DIST_RESOLVED)
+        except ValueError:
+            return FileResponse(_INDEX)
         if full_path and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(_INDEX)

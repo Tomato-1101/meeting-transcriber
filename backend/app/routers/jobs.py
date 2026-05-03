@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
@@ -20,6 +21,16 @@ router = APIRouter(tags=["jobs"])
 
 
 ALLOWED_PREPROCESS_PROFILES = {"standard", "raw", "aggressive"}
+
+_FILENAME_SAFE = re.compile(r"[^A-Za-z0-9_.\- ()ぁ-んァ-ヶ一-龯]")
+
+
+def _safe_filename(name: str, fallback: str = "audio") -> str:
+    # path 区切り・null 文字・制御文字を排除して、UI 表示と log にだけ安全な形に。
+    base = Path(name).name  # ../foo や C:\foo を捨てる
+    cleaned = _FILENAME_SAFE.sub("_", base).strip()
+    cleaned = cleaned[:200]
+    return cleaned or fallback
 
 
 @router.post("/jobs", response_model=JobResponse)
@@ -43,8 +54,10 @@ async def create_job(
     if preprocess_profile not in ALLOWED_PREPROCESS_PROFILES:
         raise HTTPException(400, f"Unsupported preprocess_profile: {preprocess_profile}")
 
+    safe_name = _safe_filename(file.filename, fallback=f"audio{ext}")
+
     job = Job(
-        original_filename=file.filename,
+        original_filename=safe_name,
         original_file_path="",
         file_size_bytes=0,
         model=model,
@@ -56,14 +69,28 @@ async def create_job(
     await db.flush()
 
     file_path = UPLOADS_DIR / f"{job.id}{ext}"
-    content = await file.read()
-    file_size = len(content)
-
-    if file_size > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+    max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    file_size = 0
+    # ストリーム書き込み: 全部メモリに乗せない（OOM 防止）。上限超過で即中断 + 部分ファイル削除。
+    try:
+        with file_path.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > max_bytes:
+                    out.close()
+                    file_path.unlink(missing_ok=True)
+                    await db.rollback()
+                    raise HTTPException(400, f"File too large. Max: {MAX_UPLOAD_SIZE_MB}MB")
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception:
+        file_path.unlink(missing_ok=True)
         await db.rollback()
-        raise HTTPException(400, f"File too large. Max: {MAX_UPLOAD_SIZE_MB}MB")
-
-    file_path.write_bytes(content)
+        raise
     job.original_file_path = str(file_path)
     job.file_size_bytes = file_size
     job.status = "processing"

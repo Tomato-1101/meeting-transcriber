@@ -90,10 +90,11 @@ async def send_chat_message(
             user_message=request.content,
             model=request.model,
         )
-    except Exception as e:
+    except Exception:
+        # SDK 例外メッセージにキー断片や URL が混入する可能性があるのでクライアントには返さない。
         logger.exception("Chat call failed")
         await db.rollback()
-        raise HTTPException(500, f"Chat failed: {e}")
+        raise HTTPException(500, "Chat failed")
 
     assistant_msg = ChatMessage(
         ai_result_id=ai_result_id,
