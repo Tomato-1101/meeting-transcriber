@@ -96,7 +96,7 @@ export function TranscriptionView({ transcription }: Props) {
             const colorClass = SPEAKER_COLORS[colorIdx % SPEAKER_COLORS.length]
             return (
               <div
-                key={seg.id}
+                key={seg.sequence_order}
                 className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex gap-3"
               >
                 <span className="text-xs text-gray-400 font-mono shrink-0 pt-0.5 w-14 text-right">

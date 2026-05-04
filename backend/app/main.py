@@ -1,5 +1,4 @@
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,17 +13,10 @@ from app.auth import (
     verify_handoff,
     verify_session,
 )
-from app.database import init_db
-from app.routers import jobs, transcriptions, ai_processing, chat
+from app.routers import transcribe, ai_processing, chat
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_db()
-    yield
-
-
-app = FastAPI(title="Meeting Transcription API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Meeting Transcription API", version="1.0.0")
 
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
@@ -79,8 +71,7 @@ async def enter(t: str | None = None, s: str | None = None):
     return resp
 
 
-app.include_router(jobs.router, prefix="/api")
-app.include_router(transcriptions.router, prefix="/api")
+app.include_router(transcribe.router, prefix="/api")
 app.include_router(ai_processing.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 

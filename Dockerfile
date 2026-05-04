@@ -22,7 +22,6 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    DATA_DIR=/data \
     FRONTEND_DIST=/app/frontend/dist \
     TORCH_HOME=/app/.cache/torch
 

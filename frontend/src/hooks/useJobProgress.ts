@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { JobProgress } from '../types'
+import type { TranscribeProgress } from '../types'
 
+// 文字起こしジョブの進捗を SSE で受け取るフック。
+// stage="completed" のイベントには result（full_text+segments+meta）が入る。
+// クライアントはそこから transcription を組み立てて context に追加する。
 export function useJobProgress(jobId: string | null) {
-  const [progress, setProgress] = useState<JobProgress | null>(null)
+  const [progress, setProgress] = useState<TranscribeProgress | null>(null)
 
   useEffect(() => {
     if (!jobId) return
 
-    const eventSource = new EventSource(`/api/jobs/${jobId}/stream`)
+    const eventSource = new EventSource(`/api/transcribe/${jobId}/stream`)
 
     eventSource.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data) as JobProgress
+      const data = JSON.parse(e.data) as TranscribeProgress
       setProgress(data)
       if (data.stage === 'completed' || data.stage === 'failed') {
         eventSource.close()

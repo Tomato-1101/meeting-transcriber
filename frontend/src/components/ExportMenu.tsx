@@ -1,24 +1,64 @@
 import { useState } from 'react'
 import { Download } from 'lucide-react'
-import { exportTranscription } from '../api/client'
+import type { Transcription } from '../types'
 
 interface Props {
-  transcriptionId: string
-  filename: string
+  transcription: Transcription
 }
 
-export function ExportMenu({ transcriptionId, filename }: Props) {
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function exportAsText(t: Transcription): string {
+  const lines: string[] = [`# Transcription: ${t.filename}`, '']
+  if (t.segments.length > 0) {
+    for (const seg of t.segments) {
+      const ts = formatTime(seg.start_time)
+      const speaker = seg.speaker ? `[${seg.speaker}] ` : ''
+      lines.push(`[${ts}] ${speaker}${seg.text}`)
+    }
+  } else {
+    lines.push(t.full_text)
+  }
+  return lines.join('\n')
+}
+
+function exportAsJson(t: Transcription): string {
+  return JSON.stringify(
+    {
+      id: t.id,
+      filename: t.filename,
+      full_text: t.full_text,
+      model_used: t.model_used,
+      language_detected: t.language_detected,
+      duration_seconds: t.duration_seconds,
+      segments: t.segments,
+    },
+    null,
+    2,
+  )
+}
+
+export function ExportMenu({ transcription }: Props) {
   const [open, setOpen] = useState(false)
 
-  const handleExport = async (format: 'text' | 'json') => {
+  const handleExport = (format: 'text' | 'json') => {
     setOpen(false)
-    const content = await exportTranscription(transcriptionId, format)
+    const content = format === 'json' ? exportAsJson(transcription) : exportAsText(transcription)
     const ext = format === 'json' ? 'json' : 'txt'
-    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/plain' })
+    const blob = new Blob([content], {
+      type: format === 'json' ? 'application/json' : 'text/plain',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
+    const base = transcription.filename.replace(/\.[^.]+$/, '')
     a.href = url
-    a.download = `${filename.replace(/\.[^.]+$/, '')}_transcription.${ext}`
+    a.download = `${base}_transcription.${ext}`
     a.click()
     URL.revokeObjectURL(url)
   }

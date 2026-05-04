@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 
-from app.config import CHUNKS_DIR, CHUNK_TARGET_DURATION_MS, CHUNK_MAX_FILE_SIZE_MB, CHUNK_MAX_DURATION_S
+from app.config import CHUNK_TARGET_DURATION_MS, CHUNK_MAX_FILE_SIZE_MB, CHUNK_MAX_DURATION_S
 from app.utils.logger import logger
 
 
@@ -70,7 +70,8 @@ def should_chunk(file_path: Path, duration_seconds: float) -> bool:
     return file_size_mb > CHUNK_MAX_FILE_SIZE_MB or duration_seconds > CHUNK_MAX_DURATION_S
 
 
-async def chunk_audio(file_path: Path, job_id: str) -> ChunkResult:
+async def chunk_audio(file_path: Path, chunk_dir: Path) -> ChunkResult:
+    """`chunk_dir` 配下に分割ファイルを書き出す。呼び出し側が tempdir を渡す前提。"""
     from pydub import AudioSegment
     from pydub.silence import detect_silence
 
@@ -113,7 +114,6 @@ async def chunk_audio(file_path: Path, job_id: str) -> ChunkResult:
     logger.info(f"Silences used for splitting: {used_silence_count}/{total_silence_count}")
     logger.info(f"Target chunk duration: {CHUNK_TARGET_DURATION_MS/1000/60:.0f} minutes")
 
-    chunk_dir = CHUNKS_DIR / job_id
     chunk_dir.mkdir(parents=True, exist_ok=True)
 
     chunks = []
@@ -140,8 +140,7 @@ async def chunk_audio(file_path: Path, job_id: str) -> ChunkResult:
     )
 
 
-def cleanup_chunks(job_id: str):
+def cleanup_chunks(chunk_dir: Path):
     import shutil
-    chunk_dir = CHUNKS_DIR / job_id
     if chunk_dir.exists():
-        shutil.rmtree(chunk_dir)
+        shutil.rmtree(chunk_dir, ignore_errors=True)
