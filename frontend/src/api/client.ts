@@ -100,3 +100,10 @@ export async function sendChatMessage(
     body: JSON.stringify({ content, model }),
   })
 }
+
+// Phase 1 限定: 旧 DB の全データを JSON で吐き出す。新仕様への移行が終わったら削除する。
+export async function legacyExportAll(): Promise<unknown> {
+  const res = await fetch(`${BASE}/admin/export-all`)
+  if (!res.ok) throw new Error(`Legacy export failed: ${res.status}`)
+  return res.json()
+}

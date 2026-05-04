@@ -15,7 +15,7 @@ from app.auth import (
     verify_session,
 )
 from app.database import init_db
-from app.routers import jobs, transcriptions, ai_processing, chat
+from app.routers import jobs, transcriptions, ai_processing, chat, admin_export
 
 
 @asynccontextmanager
@@ -83,6 +83,7 @@ app.include_router(jobs.router, prefix="/api")
 app.include_router(transcriptions.router, prefix="/api")
 app.include_router(ai_processing.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(admin_export.router, prefix="/api")
 
 
 @app.get("/api/health")
