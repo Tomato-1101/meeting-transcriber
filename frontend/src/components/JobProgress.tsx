@@ -1,4 +1,4 @@
-import type { JobProgress as JobProgressType } from '../types'
+import type { TranscribeProgress } from '../types'
 
 const STAGE_LABELS: Record<string, string> = {
   probing: '音声ファイルを解析中...',
@@ -13,7 +13,7 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 interface Props {
-  progress: JobProgressType
+  progress: TranscribeProgress
   filename: string
 }
 

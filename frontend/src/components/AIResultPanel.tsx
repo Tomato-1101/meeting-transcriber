@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, Copy, Check, Trash2, MessageSquare, Eye, FileCode } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AIResult } from '../types'
+import type { AIResult, Transcription } from '../types'
 import { AIResultChat } from './AIResultChat'
 
 interface Props {
-  results: AIResult[]
-  onDelete: (id: string) => Promise<void> | void
+  transcription: Transcription
+  onDelete: (aiResultId: string) => void
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -33,7 +33,15 @@ function formatDate(iso: string): string {
   })
 }
 
-function AIResultCard({ result, onDelete }: { result: AIResult; onDelete: (id: string) => Promise<void> | void }) {
+function AIResultCard({
+  transcription,
+  result,
+  onDelete,
+}: {
+  transcription: Transcription
+  result: AIResult
+  onDelete: (id: string) => void
+}) {
   const [expanded, setExpanded] = useState(true)
   const [copied, setCopied] = useState(false)
   const [renderMarkdown, setRenderMarkdown] = useState(true)
@@ -46,10 +54,10 @@ function AIResultCard({ result, onDelete }: { result: AIResult; onDelete: (id: s
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!confirm('この結果を削除しますか？同じプロンプトで再実行できるようになります。')) return
-    await onDelete(result.id)
+    onDelete(result.id)
   }
 
   return (
@@ -123,7 +131,7 @@ function AIResultCard({ result, onDelete }: { result: AIResult; onDelete: (id: s
           )}
           {showChat && (
             <div className="mt-4 pt-4 border-t border-gray-100">
-              <AIResultChat aiResultId={result.id} />
+              <AIResultChat transcription={transcription} aiResult={result} />
             </div>
           )}
         </div>
@@ -132,14 +140,15 @@ function AIResultCard({ result, onDelete }: { result: AIResult; onDelete: (id: s
   )
 }
 
-export function AIResultPanel({ results, onDelete }: Props) {
+export function AIResultPanel({ transcription, onDelete }: Props) {
+  const results = transcription.ai_results
   if (results.length === 0) return null
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-gray-700">AI処理結果</h3>
       {results.map((r) => (
-        <AIResultCard key={r.id} result={r} onDelete={onDelete} />
+        <AIResultCard key={r.id} transcription={transcription} result={r} onDelete={onDelete} />
       ))}
     </div>
   )

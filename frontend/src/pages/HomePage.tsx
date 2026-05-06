@@ -1,45 +1,51 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UploadArea } from '../components/UploadArea'
 import { JobProgressBar } from '../components/JobProgress'
-import { JobList } from '../components/JobList'
+import { TranscriptionList } from '../components/TranscriptionList'
 import { useJobProgress } from '../hooks/useJobProgress'
-import { createJob, listJobs, deleteJob } from '../api/client'
-import type { Job } from '../types'
+import { startTranscribe } from '../api/client'
+import { useHistory } from '../state/HistoryContext'
+import type { Transcription } from '../types'
 
 export function HomePage() {
-  const [jobs, setJobs] = useState<Job[]>([])
+  const { transcriptions, addTranscription, renameTranscription, deleteTranscription } = useHistory()
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [activeFilename, setActiveFilename] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { progress, reset } = useJobProgress(activeJobId)
   const navigate = useNavigate()
-
-  const loadJobs = useCallback(async () => {
-    try {
-      const data = await listJobs()
-      setJobs(data.jobs)
-    } catch {
-      // ignore
-    }
-  }, [])
+  const handledRef = useRef<string | null>(null)
 
   useEffect(() => {
-    loadJobs()
-  }, [loadJobs])
-
-  useEffect(() => {
-    if (progress?.stage === 'completed' && progress.transcription_id) {
-      loadJobs()
+    // 完了/失敗イベントは 1 ジョブにつき 1 回だけ処理する
+    if (!progress || !activeJobId) return
+    if (handledRef.current === activeJobId) return
+    if (progress.stage === 'completed' && progress.result) {
+      handledRef.current = activeJobId
+      const r = progress.result
+      const transcription: Transcription = {
+        id: crypto.randomUUID(),
+        filename: r.filename,
+        full_text: r.full_text,
+        model_used: r.model_used,
+        language_detected: r.language_detected,
+        duration_seconds: r.duration_seconds,
+        created_at: new Date().toISOString(),
+        segments: r.segments,
+        ai_results: [],
+      }
+      addTranscription(transcription)
       setTimeout(() => {
-        navigate(`/transcription/${progress.transcription_id}`)
         setActiveJobId(null)
         reset()
-      }, 500)
-    } else if (progress?.stage === 'failed') {
-      loadJobs()
+        navigate(`/transcription/${transcription.id}`)
+      }, 400)
+    } else if (progress.stage === 'failed') {
+      handledRef.current = activeJobId
+      setError(progress.error || '文字起こしに失敗しました')
     }
-  }, [progress, navigate, loadJobs, reset])
+  }, [progress, activeJobId, addTranscription, navigate, reset])
 
   const handleUpload = async (
     file: File,
@@ -49,22 +55,12 @@ export function HomePage() {
   ) => {
     setError(null)
     try {
-      const job = await createJob(file, model, language, preprocessProfile)
-      setActiveJobId(job.id)
-      setActiveFilename(file.name)
-      loadJobs()
+      const { job_id, filename } = await startTranscribe(file, model, language, preprocessProfile)
+      setActiveJobId(job_id)
+      setActiveFilename(filename || file.name)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'アップロードに失敗しました')
     }
-  }
-
-  const handleDelete = async (id: string) => {
-    await deleteJob(id)
-    loadJobs()
-  }
-
-  const handleRename = (id: string, newName: string) => {
-    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, original_filename: newName } : j)))
   }
 
   return (
@@ -82,8 +78,15 @@ export function HomePage() {
       )}
 
       <div>
-        <h2 className="text-lg font-medium text-gray-800 mb-4">履歴</h2>
-        <JobList jobs={jobs} onDelete={handleDelete} onRename={handleRename} />
+        <h2 className="text-lg font-medium text-gray-800 mb-2">履歴</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          ※ サーバには何も保存されません。ブラウザを閉じると履歴は消えます。残したい場合は右上の「ダウンロード」で JSON 保存し、次回「読み込み」で復元してください。
+        </p>
+        <TranscriptionList
+          transcriptions={transcriptions}
+          onRename={renameTranscription}
+          onDelete={deleteTranscription}
+        />
       </div>
     </div>
   )

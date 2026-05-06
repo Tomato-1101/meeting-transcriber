@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { Send, Loader2, User, Bot } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { listChatMessages, sendChatMessage } from '../api/client'
-import type { ChatMessage } from '../types'
+import { sendChat } from '../api/client'
+import { useHistory } from '../state/HistoryContext'
+import type { AIResult, ChatMessage, Transcription } from '../types'
 
 interface Props {
-  aiResultId: string
+  transcription: Transcription
+  aiResult: AIResult
 }
 
 const MODEL_STORAGE_KEY = 'ai_chat_model'
 
-export function AIResultChat({ aiResultId }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+export function AIResultChat({ transcription, aiResult }: Props) {
+  const { addChatMessages } = useHistory()
+  const messages = aiResult.chat_messages
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [model, setModel] = useState(() => {
@@ -23,24 +26,12 @@ export function AIResultChat({ aiResultId }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    let cancelled = false
-    listChatMessages(aiResultId)
-      .then((m) => {
-        if (!cancelled) setMessages(m)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [aiResultId])
-
-  useEffect(() => {
     localStorage.setItem(MODEL_STORAGE_KEY, model)
   }, [model])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages.length])
+  }, [messages.length, sending])
 
   const handleSend = async () => {
     const content = input.trim()
@@ -48,24 +39,37 @@ export function AIResultChat({ aiResultId }: Props) {
     setSending(true)
     setError(null)
 
-    const optimistic: ChatMessage = {
-      id: `optimistic-${Date.now()}`,
-      ai_result_id: aiResultId,
+    const nextOrder = messages.length === 0
+      ? 0
+      : Math.max(...messages.map((m) => m.sequence_order)) + 1
+    const userMsg: ChatMessage = {
       role: 'user',
       content,
       model_used: null,
+      sequence_order: nextOrder,
       created_at: new Date().toISOString(),
-      sequence_order: messages.length,
     }
-    setMessages((prev) => [...prev, optimistic])
     setInput('')
 
     try {
-      const { user, assistant } = await sendChatMessage(aiResultId, content, model)
-      setMessages((prev) => [...prev.filter((m) => m.id !== optimistic.id), user, assistant])
+      const { content: assistantContent } = await sendChat({
+        transcriptionText: transcription.full_text,
+        aiResultText: aiResult.result_text,
+        aiResultType: aiResult.result_type,
+        history: messages.map((m) => ({ role: m.role, content: m.content })),
+        userMessage: content,
+        model,
+      })
+      const assistantMsg: ChatMessage = {
+        role: 'assistant',
+        content: assistantContent,
+        model_used: model,
+        sequence_order: nextOrder + 1,
+        created_at: new Date().toISOString(),
+      }
+      addChatMessages(transcription.id, aiResult.id, [userMsg, assistantMsg])
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '送信に失敗しました')
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
       setInput(content)
     } finally {
       setSending(false)
@@ -104,9 +108,9 @@ export function AIResultChat({ aiResultId }: Props) {
             質問を入力すると、この AI 結果と元の文字起こしを参照して回答します
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m, idx) => (
             <div
-              key={m.id}
+              key={`${m.sequence_order}-${idx}`}
               className={`flex gap-2 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
               <div
